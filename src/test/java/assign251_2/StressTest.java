@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.List;
 
 /**
  * Stress tests for performance analysis.
@@ -38,11 +39,16 @@ class StressTest {
         testLayoutPerformance();
     }
 
-    private void testMemAppender(java.util.List<org.apache.log4j.spi.LoggingEvent> list, String name, long maxSize) {
-        MemAppender appender = MemAppender.getInstance();
-        appender.reset(); // Reset before each configuration test
-        appender.setLogList(list);
-        appender.setMaxSize(maxSize);
+    // Modified testMemAppender parameter type to List<String>
+    private void testMemAppender(List<String> list, String name, long maxSize) {
+        // Reset instance to allow injection of new list
+        MemAppender.resetInstance();
+        // Close current instance to reset singleton, ensure using new list
+        MemAppender.getInstance().close();
+        // Inject list via parameterized getInstance (now String type)
+        MemAppender appender = MemAppender.getInstance(list);
+        appender.reset();
+        appender.setMaxSize((int) maxSize);
         appender.setLayout(new SimpleLayout());
 
         Logger logger = Logger.getLogger("StressLogger");

@@ -33,12 +33,12 @@ class IntegrationTest {
 
         List<String> strings = memAppender.getEventStrings();
         assertEquals(1, strings.size());
-        assertEquals("[INFO] Integration test", strings.get(0));
+        assertEquals("[INFO] Integration test" + System.lineSeparator(), strings.get(0));
     }
 
     @Test
     void testVelocityLayoutWithConsoleAppender() {
-        VelocityLayout layout = new VelocityLayout("Console: $m$n");
+        VelocityLayout layout = new VelocityLayout("Console: $m" + System.lineSeparator());  // Explicit separator to avoid literal $n
         ConsoleAppender consoleAppender = new ConsoleAppender(layout);
 
         Logger logger = Logger.getRootLogger();
@@ -51,7 +51,7 @@ class IntegrationTest {
     @Test
     void testMemAppenderWithPatternLayout() {
         MemAppender memAppender = MemAppender.getInstance();
-        memAppender.setLayout(new PatternLayout("%p - %m"));
+        memAppender.setLayout(new PatternLayout("%p - %m%n"));  // %n ensures platform line separator
 
         Logger logger = Logger.getLogger("PatternTest");
         logger.addAppender(memAppender);
@@ -60,6 +60,6 @@ class IntegrationTest {
 
         List<String> strings = memAppender.getEventStrings();
         assertEquals(1, strings.size());
-        assertEquals("ERROR - Pattern layout works", strings.get(0));
+        assertEquals("ERROR - Pattern layout works" + System.lineSeparator(), strings.get(0));
     }
 }

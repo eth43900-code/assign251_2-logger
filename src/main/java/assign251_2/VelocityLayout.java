@@ -3,73 +3,68 @@ package assign251_2;
 import org.apache.log4j.Layout;
 import org.apache.log4j.spi.LoggingEvent;
 import org.apache.velocity.VelocityContext;
-import org.apache.velocity.app.Velocity;
+import org.apache.velocity.app.VelocityEngine;
 import java.io.StringWriter;
+import java.io.Writer;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Properties;
 
-/**
- * Custom Log4j Layout using Apache Velocity template engine.
- * Supported variables: $c, $d, $m, $p, $t, $n
- */
 public class VelocityLayout extends Layout {
+    private final VelocityEngine velocityEngine;
+    private final VelocityContext context;
+    private String template;
 
-    private String pattern;
-
-    static {
-        // Initialize Velocity once
-        try {
-            java.util.Properties p = new java.util.Properties();
-            // Use StringResourceLoader if needed for more complex templates,
-            // but standard initialization works for inline evaluation.
-            // Turning off logging for velocity itself to keep output clean
-            p.setProperty("runtime.log.logsystem.class", "org.apache.velocity.runtime.log.NullLogSystem");
-            Velocity.init(p);
-        } catch (Exception e) {
-            System.err.println("Failed to initialize Velocity: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Default constructor with a default pattern.
-     */
     public VelocityLayout() {
-        this("[%p] $c $d: $m$n");
+        this(null);
     }
 
-    /**
-     * Constructor with a custom pattern.
-     * @param pattern The velocity template pattern.
-     */
     public VelocityLayout(String pattern) {
-        this.pattern = pattern;
-    }
-
-    public void setPattern(String pattern) {
-        this.pattern = pattern;
-    }
-
-    public String getPattern() {
-        return pattern;
+        this.template = pattern;
+        this.context = new VelocityContext();
+        this.velocityEngine = new VelocityEngine();
+        try {
+            Properties props = new Properties();
+            props.setProperty("resource.loader", "class");
+            props.setProperty("class.resource.loader.class", "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
+            velocityEngine.init(props);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize VelocityEngine", e);
+        }
     }
 
     @Override
     public String format(LoggingEvent event) {
-        VelocityContext context = new VelocityContext();
-        // Map required variables
-        context.put("c", event.getLoggerName());
-        context.put("d", new Date(event.getTimeStamp()).toString());
-        context.put("m", event.getRenderedMessage());
-        context.put("p", event.getLevel().toString());
-        context.put("t", event.getThreadName());
-        context.put("n", System.lineSeparator());
+        String message = event.getRenderedMessage() == null ? "" : event.getRenderedMessage();
+        String lineSeparator = System.lineSeparator();
 
-        StringWriter sw = new StringWriter();
-        try {
-            Velocity.evaluate(context, sw, "VelocityLayout", pattern);
-        } catch (Exception e) {
-            return "Velocity Error: " + e.getMessage() + System.lineSeparator();
+        // Handle null template: return raw message with platform line separator
+        if (template == null) {
+            return message + lineSeparator;
         }
-        return sw.toString();
+
+        try {
+            context.put("m", message);  // Support $m variable (added)
+            context.put("message", message);
+            context.put("p", event.getLevel().toString());  // Support $p variable
+            context.put("level", event.getLevel().toString());
+            context.put("c", event.getLoggerName());       // Support $c variable
+            context.put("logger", event.getLoggerName());
+            context.put("t", Thread.currentThread().getName()); // Support $t variable
+            context.put("thread", Thread.currentThread().getName());
+            // Format date for $d variable (ISO-like for consistency with PatternLayout)
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String formattedDate = dateFormat.format(new Date(event.getTimeStamp()));
+            context.put("d", formattedDate);         // Support $d variable
+            context.put("date", formattedDate);
+
+            Writer writer = new StringWriter();
+            velocityEngine.evaluate(context, writer, "VelocityLayout", template);
+            return writer.toString() + lineSeparator;  // Use platform line separator
+        } catch (Exception e) {
+            // Handle invalid template: return raw message with platform line separator
+            return message + lineSeparator;
+        }
     }
 
     @Override
@@ -78,7 +73,9 @@ public class VelocityLayout extends Layout {
     }
 
     @Override
-    public void activateOptions() {
-        // No specific options to activate
+    public void activateOptions() {}
+
+    public void setPattern(String pattern) {
+        this.template = pattern;
     }
 }
