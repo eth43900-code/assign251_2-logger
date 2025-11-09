@@ -19,7 +19,6 @@ class MemAppenderTest {
     @BeforeEach
     void setUp() {
         appender = MemAppender.getInstance();
-        // Use the new reset() method to ensure a clean, non-closed state for every test
         appender.reset();
         appender.setLayout(new SimpleLayout());
     }
@@ -37,9 +36,9 @@ class MemAppenderTest {
         LoggingEvent event = new LoggingEvent("TestLogger", logger, Level.INFO, "Test message", null);
         appender.append(event);
 
-        List<LoggingEvent> logs = appender.getCurrentLogs();
+        List<String> logs = appender.getCurrentLogs(); // Use the added getCurrentLogs() method
         assertEquals(1, logs.size());
-        assertEquals("Test message", logs.get(0).getRenderedMessage());
+        assertEquals("INFO - Test message" + System.lineSeparator(), logs.get(0)); // Match SimpleLayout format
     }
 
     @Test
@@ -47,32 +46,35 @@ class MemAppenderTest {
         appender.setMaxSize(2);
         Logger logger = Logger.getLogger("TestLogger");
 
-        // These appends should now work because reset() ensured closed=false
         appender.append(new LoggingEvent("c", logger, Level.INFO, "Msg 1", null));
         appender.append(new LoggingEvent("c", logger, Level.INFO, "Msg 2", null));
 
         assertEquals(2, appender.getCurrentLogs().size(), "Should have 2 logs before discard");
         assertEquals(0, appender.getDiscardedLogCount());
 
-        // This should cause "Msg 1" to be discarded
         appender.append(new LoggingEvent("c", logger, Level.INFO, "Msg 3", null));
 
-        List<LoggingEvent> logs = appender.getCurrentLogs();
+        List<String> logs = appender.getCurrentLogs();
         assertEquals(2, logs.size(), "Should still have 2 logs after discard");
-        assertEquals("Msg 2", logs.get(0).getRenderedMessage());
-        assertEquals("Msg 3", logs.get(1).getRenderedMessage());
+        assertEquals("INFO - Msg 2" + System.lineSeparator(), logs.get(0));
+        assertEquals("INFO - Msg 3" + System.lineSeparator(), logs.get(1));
         assertEquals(1, appender.getDiscardedLogCount());
     }
 
     @Test
     void testDependencyInjection() {
-        LinkedList<LoggingEvent> injectedList = new LinkedList<>();
-        appender.setLogList(injectedList);
+        appender.close();
+        // Reset instance to allow injection
+        MemAppender.resetInstance();
+        // Inject String-typed list (resolve type mismatch issue)
+        LinkedList<String> injectedList = new LinkedList<>();
+        appender = MemAppender.getInstance(injectedList);
+        appender.setLayout(new SimpleLayout());
 
         Logger logger = Logger.getLogger("TestLogger");
         appender.append(new LoggingEvent("c", logger, Level.INFO, "Injected list test", null));
 
         assertEquals(1, injectedList.size());
-        assertEquals("Injected list test", injectedList.get(0).getRenderedMessage());
+        assertEquals("INFO - Injected list test" + System.lineSeparator(), injectedList.get(0));
     }
 }
