@@ -20,6 +20,8 @@ class MemAppenderJmxTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // Ensure clean singleton state for JMX tests
+        MemAppender.resetInstance();
         appender = MemAppender.getInstance();
         appender.reset();
         appender.setMaxSize(100);
@@ -31,6 +33,7 @@ class MemAppenderJmxTest {
     @AfterEach
     void tearDown() {
         appender.reset();
+        MemAppender.resetInstance(); // Clean up singleton
     }
 
     @Test
@@ -45,6 +48,7 @@ class MemAppenderJmxTest {
         appender.append(new LoggingEvent("c", logger, Level.INFO, "JMX Test 2", null));
 
         // Use getAttribute for LogMessages attribute (standard for getters in MBeans)
+        // This now triggers on-demand formatting in the fixed MemAppender
         String[] messages = (String[]) mbs.getAttribute(mbeanName, "LogMessages");
 
         assertEquals(2, messages.length, "JMX should retrieve 2 logs");
@@ -65,6 +69,9 @@ class MemAppenderJmxTest {
 
     @Test
     void testJmxGetEstimatedCacheSize() throws Exception {
+        // This test should still pass, as the on-demand calculation
+        // will perform the same logic that this test expects.
+
         // Dynamic calculation for platform line separator bytes: "INFO - " = 7 chars, msg chars, + lsBytes
         // Short: 7 + 9 + lsBytes = 16 + lsBytes
         // Long: 7 + 20 + lsBytes = 27 + lsBytes
@@ -77,6 +84,7 @@ class MemAppenderJmxTest {
         appender.append(new LoggingEvent("c", logger, Level.INFO, log1, null));
         appender.append(new LoggingEvent("c", logger, Level.INFO, log2, null));
 
+        // This now triggers the on-demand calculation in the fixed MemAppender
         long cacheSize = (long) mbs.getAttribute(mbeanName, "EstimatedCacheSize");
         assertEquals(expected, cacheSize, "JMX estimated cache size is incorrect");
     }

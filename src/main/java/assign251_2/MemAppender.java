@@ -6,25 +6,35 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
+/**
+ * Custom Log4j Appender that stores LoggingEvents in memory.
+ * Implements PDF requirements
+ * and Bonus MBean requirements.
+ */
 public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
     private static MemAppender instance;
-    private final List<String> logMessages; // Store formatted log strings
+    // Stores LoggingEvents as required by PDF
+    private final List<LoggingEvent> logEvents;
     private int maxSize = 100;
     private long discardedLogCount = 0;
-    private long estimatedCacheSize = 0;
     private final ReentrantLock lock = new ReentrantLock();
 
+    // Store MBean name for un-registration
+    private ObjectName mbeanName = null;
+
+    // Default constructor uses ArrayList
     private MemAppender() {
-        this.logMessages = new ArrayList<>();
-        registerMBean();
+        this(new ArrayList<>()); // Default to ArrayList
     }
 
-    // Constructor with custom list (for testing)
-    private MemAppender(List<String> customList) {
-        this.logMessages = customList;
+    // Constructor with custom list for Dependency Injection
+    private MemAppender(List<LoggingEvent> customList) {
+        this.logEvents = customList;
         registerMBean();
     }
 
@@ -35,44 +45,65 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
         return instance;
     }
 
-    // Overloaded getInstance for testing (inject String list)
-    public static synchronized MemAppender getInstance(List<String> list) {
-        if (instance == null) {
-            instance = new MemAppender(list);
+    // Overloaded getInstance for testing (inject LoggingEvent list)
+    public static synchronized MemAppender getInstance(List<LoggingEvent> list) {
+        // Close previous instance if it exists to ensure new list is used
+        if (instance != null) {
+            instance.close();
         }
+        instance = new MemAppender(list);
         return instance;
     }
 
-    // New method to reset singleton for testing
+    // Method to reset singleton for testing
     public static synchronized void resetInstance() {
+        if (instance != null) {
+            instance.close();
+        }
         instance = null;
     }
 
     private void registerMBean() {
         try {
             MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-            ObjectName name = new ObjectName("assign251_2:type=MemAppender");
-            if (!mbs.isRegistered(name)) {
-                mbs.registerMBean(this, name);
+            // Store the name in the field
+            this.mbeanName = new ObjectName("assign251_2:type=MemAppender");
+            if (!mbs.isRegistered(mbeanName)) {
+                mbs.registerMBean(this, mbeanName);
             }
         } catch (Exception e) {
+            // In a real app, use a Log4j internal logger
             e.printStackTrace();
         }
     }
 
+    // New method to unregister the MBean
+    private void unregisterMBean() {
+        if (this.mbeanName != null) {
+            try {
+                MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+                if (mbs.isRegistered(mbeanName)) {
+                    mbs.unregisterMBean(mbeanName);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            this.mbeanName = null;
+        }
+    }
+
+
     @Override
     protected void append(LoggingEvent event) {
+        // This method only adds the event. Formatting is done on demand.
         lock.lock();
         try {
-            String message = layout.format(event);
-            if (logMessages.size() >= maxSize) {
+            if (logEvents.size() >= maxSize) {
                 discardedLogCount++;
                 // Remove oldest log
-                String oldest = logMessages.remove(0);
-                estimatedCacheSize -= oldest.getBytes().length;
+                logEvents.remove(0);
             }
-            logMessages.add(message);
-            estimatedCacheSize += message.getBytes().length;
+            logEvents.add(event);
         } finally {
             lock.unlock();
         }
@@ -81,61 +112,152 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
     @Override
     public void close() {
         // Clean up resources
+        lock.lock();
+        try {
+            logEvents.clear();
+            discardedLogCount = 0;
+        } finally {
+            lock.unlock();
+        }
+        // CRITICAL FIX: Unregister MBean when closing
+        unregisterMBean();
     }
 
     @Override
     public boolean requiresLayout() {
-        return true;
+        return true; // Yes, getEventStrings, printLogs, and MBean methods need a layout
     }
 
-    // JMX method implementations
-    @Override
-    public String[] getLogMessages() {
+    // === PDF Requirement Methods ===
+
+    /**
+     * PDF Req 1a: Returns an unmodifiable list of the cached LoggingEvents.
+     */
+    public List<LoggingEvent> getCurrentLogs() {
         lock.lock();
         try {
-            return logMessages.toArray(new String[0]);
+            return Collections.unmodifiableList(new ArrayList<>(logEvents));
         } finally {
             lock.unlock();
         }
     }
 
+    /**
+     * PDF Req 1b: Returns an unmodifiable list of formatted strings.
+     * Formatting happens here, on demand.
+     */
+    public List<String> getEventStrings() {
+        lock.lock();
+        try {
+            // Precondition check
+            if (layout == null) {
+                throw new IllegalStateException("Layout is required for getEventStrings()");
+            }
+            List<String> formattedMessages = logEvents.stream()
+                    .map(layout::format)
+                    .collect(Collectors.toList());
+            return Collections.unmodifiableList(formattedMessages);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * PDF Req 1c: Prints formatted logs to console and clears the cache.
+     */
+    public void printLogs() {
+        lock.lock();
+        try {
+            // Precondition check
+            if (layout == null) {
+                throw new IllegalStateException("Layout is required for printLogs()");
+            }
+            for (LoggingEvent event : logEvents) {
+                // Use print, as layout (e.g., PatternLayout %n, VelocityLayout $n) handles newlines
+                System.out.print(layout.format(event));
+            }
+            logEvents.clear();
+            discardedLogCount = 0; // Cleared logs are not counted as discarded
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // === JMX MBean (Bonus) Implementations ===
+
+    /**
+     * MBean Req 1: Get log messages as a String array.
+     * Formats on demand.
+     */
+    @Override
+    public String[] getLogMessages() {
+        lock.lock();
+        try {
+            if (layout == null) {
+                // Fallback to raw messages if no layout is set
+                return logEvents.stream()
+                        .map(LoggingEvent::getRenderedMessage)
+                        .toArray(String[]::new);
+            }
+            return logEvents.stream()
+                    .map(layout::format)
+                    .toArray(String[]::new);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * MBean Req 3: Get discarded log count.
+     */
     @Override
     public long getDiscardedLogCount() {
         return discardedLogCount;
     }
 
+    /**
+     * MBean Req 2: Get estimated cache size in bytes (total characters).
+     * This is calculated on demand, as formatting is deferred.
+     * This is slow, but the only way to satisfy all PDF requirements.
+     */
     @Override
     public long getEstimatedCacheSize() {
-        return estimatedCacheSize;
+        lock.lock();
+        try {
+            if (layout == null) {
+                // Estimate based on raw message length
+                return logEvents.stream()
+                        .mapToLong(e -> e.getRenderedMessage().length())
+                        .sum();
+            }
+            // Estimate based on formatted message byte length (as in original StressTest)
+            return logEvents.stream()
+                    .mapToLong(e -> layout.format(e).getBytes().length)
+                    .sum();
+        } finally {
+            lock.unlock();
+        }
     }
 
+    // === Other Methods ===
+
+    /**
+     * Resets the appender to a clean state.
+     */
     public void reset() {
         lock.lock();
         try {
-            logMessages.clear();
+            logEvents.clear();
             discardedLogCount = 0;
-            estimatedCacheSize = 0;
         } finally {
             lock.unlock();
         }
     }
 
+    /**
+     * Sets the max cache size.
+     */
     public void setMaxSize(int maxSize) {
         this.maxSize = maxSize;
-    }
-
-    // New method: Get current log list for testing
-    public List<String> getCurrentLogs() {
-        lock.lock();
-        try {
-            return new ArrayList<>(logMessages);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    // Method for testing
-    public List<String> getEventStrings() {
-        return getCurrentLogs();
     }
 }
