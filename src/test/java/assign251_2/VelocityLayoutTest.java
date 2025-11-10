@@ -4,14 +4,15 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LoggingEvent;
 import org.junit.jupiter.api.Test;
-
+import java.util.Date;
 import static org.junit.jupiter.api.Assertions.*;
 
 class VelocityLayoutTest {
 
     @Test
     void testFormatVariables() {
-        VelocityLayout layout = new VelocityLayout("[$p] $c: $m");
+        // Add $n to template
+        VelocityLayout layout = new VelocityLayout("[$p] $c: $m$n");
         Logger logger = Logger.getLogger("TestLogger");
         LoggingEvent event = new LoggingEvent("org.apache.log4j.Logger", logger, Level.WARN, "Hello Velocity", null);
 
@@ -21,19 +22,23 @@ class VelocityLayoutTest {
 
     @Test
     void testFormatDateAndThread() {
-        VelocityLayout layout = new VelocityLayout("$t|$m");
+        // Add $n to template
+        VelocityLayout layout = new VelocityLayout("$t|$m|$d$n");
         Logger logger = Logger.getLogger("TestLogger");
-        LoggingEvent event = new LoggingEvent("c", logger, Level.INFO, "Thread test", null);
+        long timestamp = System.currentTimeMillis();
+        LoggingEvent event = new LoggingEvent("c", logger, timestamp, Level.INFO, "Thread test", null);
 
         String formatted = layout.format(event);
         String threadName = Thread.currentThread().getName();
-        assertEquals(threadName + "|Thread test" + System.lineSeparator(), formatted);
+        String dateString = new Date(timestamp).toString();
+        assertEquals(threadName + "|Thread test|" + dateString + System.lineSeparator(), formatted);
     }
 
     @Test
     void testPatternSetter() {
         VelocityLayout layout = new VelocityLayout();
-        layout.setPattern("$m");
+        // Add $n to template
+        layout.setPattern("$m$n");
         Logger logger = Logger.getLogger("TestLogger");
         LoggingEvent event = new LoggingEvent("c", logger, Level.INFO, "Just message", null);
 
@@ -47,9 +52,8 @@ class VelocityLayoutTest {
         LoggingEvent event = new LoggingEvent("c", logger, Level.INFO, "Test with invalid template", null);
 
         String result = layout.format(event);
-        // Fallback to raw message + line separator due to exception
-        assertTrue(result.contains("Test with invalid template"), "Should catch template syntax errors");
-        assertTrue(result.endsWith(System.lineSeparator()), "Should end with platform line separator");
+        // Fallback to raw message, *without* line separator
+        assertEquals("Test with invalid template", result, "Should fallback to raw message on error");
     }
 
     @Test
@@ -59,6 +63,7 @@ class VelocityLayoutTest {
         LoggingEvent event = new LoggingEvent("c", logger, Level.INFO, "Null Pattern Test", null);
 
         String result = layout.format(event);
-        assertEquals("Null Pattern Test" + System.lineSeparator(), result, "Null template should output raw message with platform line separator");
+        // Null template should output raw message, *without* line separator
+        assertEquals("Null Pattern Test", result, "Null template should output raw message");
     }
 }

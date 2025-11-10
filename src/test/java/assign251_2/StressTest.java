@@ -1,51 +1,57 @@
 package assign251_2;
 
 import org.apache.log4j.*;
+import org.apache.log4j.spi.LoggingEvent;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Stress tests for performance analysis.
+ * Stress tests for performance analysis. [cite: 68, 69]
  * Prints results to standard output for report generation.
  */
 @Tag("stress")
 class StressTest {
 
-    private static final int NUM_LOGS = 10000;
-    private static final long[] MAX_SIZES = {10, 1000, 100000};
+    private static final int NUM_LOGS = 10000; // [cite: 75]
+    private static final long[] MAX_SIZES = {10, 1000, 100000}; // [cite: 73]
 
     @Test
     void runAllStressTests() throws IOException {
         // Ensure clean state before starting stress tests
+        MemAppender.resetInstance();
         MemAppender.getInstance().reset();
 
         System.out.println("=== Stress Test Results (Time in ms) ===");
         System.out.printf("%-30s %-10s %-15s %-15s%n", "Configuration", "MaxSize", "Time(ms)", "Est. Memory(MB)");
 
+        // Compare ArrayList vs LinkedList for MemAppender [cite: 70]
         for (long maxSize : MAX_SIZES) {
+            // Test with ArrayList<LoggingEvent>
             testMemAppender(new ArrayList<>(), "MemAppender(ArrayList)", maxSize);
+            // Test with LinkedList<LoggingEvent>
             testMemAppender(new LinkedList<>(), "MemAppender(LinkedList)", maxSize);
         }
 
-        testConsoleAppender();
-        testFileAppender();
+        // Compare with other appenders
+        testConsoleAppender(); // [cite: 70]
+        testFileAppender(); // [cite: 70]
 
         System.out.println("\n=== Layout Comparison ===");
-        testLayoutPerformance();
+        testLayoutPerformance(); // [cite: 72]
     }
 
-    // Modified testMemAppender parameter type to List<String>
-    private void testMemAppender(List<String> list, String name, long maxSize) {
+    // Modified testMemAppender parameter type to List<LoggingEvent>
+    private void testMemAppender(List<LoggingEvent> list, String name, long maxSize) {
         // Reset instance to allow injection of new list
         MemAppender.resetInstance();
-        // Close current instance to reset singleton, ensure using new list
-        MemAppender.getInstance().close();
-        // Inject list via parameterized getInstance (now String type)
+        // Inject list via parameterized getInstance (now LoggingEvent type)
         MemAppender appender = MemAppender.getInstance(list);
         appender.reset();
         appender.setMaxSize((int) maxSize);
@@ -64,7 +70,7 @@ class StressTest {
         // Set ImmediateFlush to false to avoid super slow console I/O dominating test
         appender.setImmediateFlush(false);
         // Use a dummy writer to avoid flooding actual console during test
-        appender.setWriter(new java.io.PrintWriter(new java.io.StringWriter()));
+        appender.setWriter(new PrintWriter(new StringWriter()));
 
         Logger logger = Logger.getLogger("StressLogger");
         logger.removeAllAppenders();
@@ -89,12 +95,15 @@ class StressTest {
     }
 
     private void testLayoutPerformance() {
+        // Use a clean instance for layout tests
+        MemAppender.resetInstance();
         MemAppender appender = MemAppender.getInstance();
         Logger logger = Logger.getLogger("LayoutTest");
         logger.setLevel(Level.INFO);
 
-        // Test VelocityLayout
+        // Test VelocityLayout [cite: 72]
         appender.reset(); // Ensure clean state
+        // Add $n for newline
         appender.setLayout(new VelocityLayout("[$p] $c $d: $m$n"));
         // Ensure no discard for fair layout test, we want to format ALL logs
         appender.setMaxSize(NUM_LOGS + 1);
@@ -106,12 +115,12 @@ class StressTest {
         for (int i = 0; i < NUM_LOGS; i++) {
             logger.info("Layout test message " + i);
         }
-        // Force formatting of all logs at once to measure layout performance
+        // Force formatting of all logs at once (now correct behavior)
         appender.getEventStrings();
         long endV = System.currentTimeMillis();
         System.out.println("VelocityLayout Time (10k logs): " + (endV - startV) + "ms");
 
-        // Test PatternLayout
+        // Test PatternLayout [cite: 72]
         appender.reset(); // Reset again for next layout
         appender.setLayout(new PatternLayout("[%p] %c %d: %m%n"));
         appender.setMaxSize(NUM_LOGS + 1);
@@ -129,7 +138,7 @@ class StressTest {
     }
 
     private void runLoad(Logger logger, String configName, String maxSizeVal) {
-        System.gc();
+        System.gc(); // Request GC to get a cleaner memory baseline
         long startMem = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
         long startTime = System.currentTimeMillis();
 
@@ -138,7 +147,9 @@ class StressTest {
         }
 
         long endTime = System.currentTimeMillis();
+        System.gc(); // Request GC again to measure memory after run
         long endMem = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        // Use max(0, ...) in case GC freed more than was allocated
         long usedMem = Math.max(0, endMem - startMem);
 
         System.out.printf("%-30s %-10s %-15d %-15.2f%n",

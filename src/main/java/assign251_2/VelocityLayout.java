@@ -24,9 +24,10 @@ public class VelocityLayout extends Layout {
         this.context = new VelocityContext();
         this.velocityEngine = new VelocityEngine();
         try {
+            // Configure Velocity to use a simple string-based logger
+            // and avoid classloader issues
             Properties props = new Properties();
-            props.setProperty("resource.loader", "class");
-            props.setProperty("class.resource.loader.class", "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
+            props.setProperty("runtime.log.logsystem.class", "org.apache.velocity.runtime.log.NullLogChute");
             velocityEngine.init(props);
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize VelocityEngine", e);
@@ -36,34 +37,34 @@ public class VelocityLayout extends Layout {
     @Override
     public String format(LoggingEvent event) {
         String message = event.getRenderedMessage() == null ? "" : event.getRenderedMessage();
-        String lineSeparator = System.lineSeparator();
 
-        // Handle null template: return raw message with platform line separator
+        // Handle null template: return raw message
         if (template == null) {
-            return message + lineSeparator;
+            return message;
         }
 
         try {
-            context.put("m", message);  // Support $m variable (added)
-            context.put("message", message);
-            context.put("p", event.getLevel().toString());  // Support $p variable
-            context.put("level", event.getLevel().toString());
-            context.put("c", event.getLoggerName());       // Support $c variable
-            context.put("logger", event.getLoggerName());
-            context.put("t", Thread.currentThread().getName()); // Support $t variable
-            context.put("thread", Thread.currentThread().getName());
-            // Format date for $d variable (ISO-like for consistency with PatternLayout)
-            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            String formattedDate = dateFormat.format(new Date(event.getTimeStamp()));
-            context.put("d", formattedDate);         // Support $d variable
-            context.put("date", formattedDate);
+            context.put("m", message);  // Support $m variable [cite: 54]
+            context.put("p", event.getLevel().toString());  // Support $p variable [cite: 56]
+            context.put("c", event.getLoggerName());       // Support $c variable [cite: 50]
+            context.put("t", Thread.currentThread().getName()); // Support $t variable [cite: 58]
+
+            // Format date for $d variable [cite: 52]
+            // Using a simple format for $d.toString() representation
+            String formattedDate = new Date(event.getTimeStamp()).toString();
+            context.put("d", formattedDate);
+
+            // Support $n variable (platform line separator)
+            context.put("n", System.lineSeparator());
 
             Writer writer = new StringWriter();
             velocityEngine.evaluate(context, writer, "VelocityLayout", template);
-            return writer.toString() + lineSeparator;  // Use platform line separator
+            // DO NOT append line separator automatically.
+            // The template (e.g., "$m$n") must control this.
+            return writer.toString();
         } catch (Exception e) {
-            // Handle invalid template: return raw message with platform line separator
-            return message + lineSeparator;
+            // Handle invalid template: return raw message
+            return message;
         }
     }
 
@@ -75,6 +76,10 @@ public class VelocityLayout extends Layout {
     @Override
     public void activateOptions() {}
 
+    /**
+     * Set the layout pattern. [cite: 61]
+     * @param pattern The Velocity template string.
+     */
     public void setPattern(String pattern) {
         this.template = pattern;
     }
