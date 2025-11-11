@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MemAppender.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">assign251_2</a> &gt; <a href="index.source.html" class="el_package">assign251_2</a> &gt; <span class="el_source">MemAppender.java</span></div><h1>MemAppender.java</h1><pre class="source lang-java linenums">package assign251_2;
+
+import org.apache.log4j.AppenderSkeleton;
+import org.apache.log4j.spi.LoggingEvent;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
+
+/**
+ * Custom Log4j Appender that stores LoggingEvents in memory.
+ * Implements PDF requirements
+ * and Bonus MBean requirements.
+ */
+public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
+    private static MemAppender instance;
+    // Stores LoggingEvents as required by PDF
+    private final List&lt;LoggingEvent&gt; logEvents;
+<span class="fc" id="L23">    private int maxSize = 100;</span>
+<span class="fc" id="L24">    private long discardedLogCount = 0;</span>
+<span class="fc" id="L25">    private final ReentrantLock lock = new ReentrantLock();</span>
+
+    // Store MBean name for un-registration
+<span class="fc" id="L28">    private ObjectName mbeanName = null;</span>
+
+    // Default constructor uses ArrayList
+    private MemAppender() {
+<span class="fc" id="L32">        this(new ArrayList&lt;&gt;()); // Default to ArrayList</span>
+<span class="fc" id="L33">    }</span>
+
+    // Constructor with custom list for Dependency Injection
+<span class="fc" id="L36">    private MemAppender(List&lt;LoggingEvent&gt; customList) {</span>
+<span class="fc" id="L37">        this.logEvents = customList;</span>
+<span class="fc" id="L38">        registerMBean();</span>
+<span class="fc" id="L39">    }</span>
+
+    public static synchronized MemAppender getInstance() {
+<span class="fc bfc" id="L42" title="All 2 branches covered.">        if (instance == null) {</span>
+<span class="fc" id="L43">            instance = new MemAppender();</span>
+        }
+<span class="fc" id="L45">        return instance;</span>
+    }
+
+    // Overloaded getInstance for testing (inject LoggingEvent list)
+    public static synchronized MemAppender getInstance(List&lt;LoggingEvent&gt; list) {
+        // Close previous instance if it exists to ensure new list is used
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">        if (instance != null) {</span>
+<span class="nc" id="L52">            instance.close();</span>
+        }
+<span class="fc" id="L54">        instance = new MemAppender(list);</span>
+<span class="fc" id="L55">        return instance;</span>
+    }
+
+    // Method to reset singleton for testing
+    public static synchronized void resetInstance() {
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (instance != null) {</span>
+<span class="fc" id="L61">            instance.close();</span>
+        }
+<span class="fc" id="L63">        instance = null;</span>
+<span class="fc" id="L64">    }</span>
+
+    private void registerMBean() {
+        try {
+<span class="fc" id="L68">            MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();</span>
+            // Store the name in the field
+<span class="fc" id="L70">            this.mbeanName = new ObjectName(&quot;assign251_2:type=MemAppender&quot;);</span>
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">            if (!mbs.isRegistered(mbeanName)) {</span>
+<span class="fc" id="L72">                mbs.registerMBean(this, mbeanName);</span>
+            }
+<span class="nc" id="L74">        } catch (Exception e) {</span>
+            // In a real app, use a Log4j internal logger
+<span class="nc" id="L76">            e.printStackTrace();</span>
+<span class="fc" id="L77">        }</span>
+<span class="fc" id="L78">    }</span>
+
+    // New method to unregister the MBean
+    private void unregisterMBean() {
+<span class="fc bfc" id="L82" title="All 2 branches covered.">        if (this.mbeanName != null) {</span>
+            try {
+<span class="fc" id="L84">                MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">                if (mbs.isRegistered(mbeanName)) {</span>
+<span class="fc" id="L86">                    mbs.unregisterMBean(mbeanName);</span>
+                }
+<span class="nc" id="L88">            } catch (Exception e) {</span>
+<span class="nc" id="L89">                e.printStackTrace();</span>
+<span class="fc" id="L90">            }</span>
+<span class="fc" id="L91">            this.mbeanName = null;</span>
+        }
+<span class="fc" id="L93">    }</span>
+
+
+    @Override
+    protected void append(LoggingEvent event) {
+        // This method only adds the event. Formatting is done on demand.
+<span class="fc" id="L99">        lock.lock();</span>
+        try {
+<span class="fc bfc" id="L101" title="All 2 branches covered.">            if (logEvents.size() &gt;= maxSize) {</span>
+<span class="fc" id="L102">                discardedLogCount++;</span>
+                // Remove oldest log
+<span class="fc" id="L104">                logEvents.remove(0);</span>
+            }
+<span class="fc" id="L106">            logEvents.add(event);</span>
+        } finally {
+<span class="fc" id="L108">            lock.unlock();</span>
+        }
+<span class="fc" id="L110">    }</span>
+
+    @Override
+    public void close() {
+        // Clean up resources
+<span class="fc" id="L115">        lock.lock();</span>
+        try {
+<span class="fc" id="L117">            logEvents.clear();</span>
+<span class="fc" id="L118">            discardedLogCount = 0;</span>
+        } finally {
+<span class="fc" id="L120">            lock.unlock();</span>
+        }
+        // CRITICAL FIX: Unregister MBean when closing
+<span class="fc" id="L123">        unregisterMBean();</span>
+<span class="fc" id="L124">    }</span>
+
+    @Override
+    public boolean requiresLayout() {
+<span class="nc" id="L128">        return true; // Yes, getEventStrings, printLogs, and MBean methods need a layout</span>
+    }
+
+    // === PDF Requirement Methods ===
+
+    /**
+     * PDF Req 1a: Returns an unmodifiable list of the cached LoggingEvents.
+     */
+    public List&lt;LoggingEvent&gt; getCurrentLogs() {
+<span class="fc" id="L137">        lock.lock();</span>
+        try {
+<span class="fc" id="L139">            return Collections.unmodifiableList(new ArrayList&lt;&gt;(logEvents));</span>
+        } finally {
+<span class="fc" id="L141">            lock.unlock();</span>
+        }
+    }
+
+    /**
+     * PDF Req 1b: Returns an unmodifiable list of formatted strings.
+     * Formatting happens here, on demand.
+     */
+    public List&lt;String&gt; getEventStrings() {
+<span class="fc" id="L150">        lock.lock();</span>
+        try {
+            // Precondition check
+<span class="fc bfc" id="L153" title="All 2 branches covered.">            if (layout == null) {</span>
+<span class="fc" id="L154">                throw new IllegalStateException(&quot;Layout is required for getEventStrings()&quot;);</span>
+            }
+<span class="fc" id="L156">            List&lt;String&gt; formattedMessages = logEvents.stream()</span>
+<span class="fc" id="L157">                    .map(layout::format)</span>
+<span class="fc" id="L158">                    .collect(Collectors.toList());</span>
+<span class="fc" id="L159">            return Collections.unmodifiableList(formattedMessages);</span>
+        } finally {
+<span class="fc" id="L161">            lock.unlock();</span>
+        }
+    }
+
+    /**
+     * PDF Req 1c: Prints formatted logs to console and clears the cache.
+     */
+    public void printLogs() {
+<span class="fc" id="L169">        lock.lock();</span>
+        try {
+            // Precondition check
+<span class="pc bpc" id="L172" title="1 of 2 branches missed.">            if (layout == null) {</span>
+<span class="nc" id="L173">                throw new IllegalStateException(&quot;Layout is required for printLogs()&quot;);</span>
+            }
+<span class="fc bfc" id="L175" title="All 2 branches covered.">            for (LoggingEvent event : logEvents) {</span>
+                // Use print, as layout (e.g., PatternLayout %n, VelocityLayout $n) handles newlines
+<span class="fc" id="L177">                System.out.print(layout.format(event));</span>
+<span class="fc" id="L178">            }</span>
+<span class="fc" id="L179">            logEvents.clear();</span>
+<span class="fc" id="L180">            discardedLogCount = 0; // Cleared logs are not counted as discarded</span>
+        } finally {
+<span class="fc" id="L182">            lock.unlock();</span>
+        }
+<span class="fc" id="L184">    }</span>
+
+    // === JMX MBean (Bonus) Implementations ===
+
+    /**
+     * MBean Req 1: Get log messages as a String array.
+     * Formats on demand.
+     */
+    @Override
+    public String[] getLogMessages() {
+<span class="fc" id="L194">        lock.lock();</span>
+        try {
+<span class="pc bpc" id="L196" title="1 of 2 branches missed.">            if (layout == null) {</span>
+                // Fallback to raw messages if no layout is set
+<span class="nc" id="L198">                return logEvents.stream()</span>
+<span class="nc" id="L199">                        .map(LoggingEvent::getRenderedMessage)</span>
+<span class="nc" id="L200">                        .toArray(String[]::new);</span>
+            }
+<span class="fc" id="L202">            return logEvents.stream()</span>
+<span class="fc" id="L203">                    .map(layout::format)</span>
+<span class="fc" id="L204">                    .toArray(String[]::new);</span>
+        } finally {
+<span class="fc" id="L206">            lock.unlock();</span>
+        }
+    }
+
+    /**
+     * MBean Req 3: Get discarded log count.
+     */
+    @Override
+    public long getDiscardedLogCount() {
+<span class="fc" id="L215">        return discardedLogCount;</span>
+    }
+
+    /**
+     * MBean Req 2: Get estimated cache size in bytes (total characters).
+     * This is calculated on demand, as formatting is deferred.
+     * This is slow, but the only way to satisfy all PDF requirements.
+     */
+    @Override
+    public long getEstimatedCacheSize() {
+<span class="fc" id="L225">        lock.lock();</span>
+        try {
+<span class="pc bpc" id="L227" title="1 of 2 branches missed.">            if (layout == null) {</span>
+                // Estimate based on raw message length
+<span class="nc" id="L229">                return logEvents.stream()</span>
+<span class="nc" id="L230">                        .mapToLong(e -&gt; e.getRenderedMessage().length())</span>
+<span class="nc" id="L231">                        .sum();</span>
+            }
+            // Estimate based on formatted message byte length (as in original StressTest)
+<span class="fc" id="L234">            return logEvents.stream()</span>
+<span class="fc" id="L235">                    .mapToLong(e -&gt; layout.format(e).getBytes().length)</span>
+<span class="fc" id="L236">                    .sum();</span>
+        } finally {
+<span class="fc" id="L238">            lock.unlock();</span>
+        }
+    }
+
+    // === Other Methods ===
+
+    /**
+     * Resets the appender to a clean state.
+     */
+    public void reset() {
+<span class="fc" id="L248">        lock.lock();</span>
+        try {
+<span class="fc" id="L250">            logEvents.clear();</span>
+<span class="fc" id="L251">            discardedLogCount = 0;</span>
+        } finally {
+<span class="fc" id="L253">            lock.unlock();</span>
+        }
+<span class="fc" id="L255">    }</span>
+
+    /**
+     * Sets the max cache size.
+     */
+    public void setMaxSize(int maxSize) {
+<span class="fc" id="L261">        this.maxSize = maxSize;</span>
+<span class="fc" id="L262">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>
