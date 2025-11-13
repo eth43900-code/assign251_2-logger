@@ -134,11 +134,11 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
      * PDF Req 1a: Returns an unmodifiable list of the cached LoggingEvents.
      */
     public List&lt;LoggingEvent&gt; getCurrentLogs() {
-<span class="fc" id="L137">        lock.lock();</span>
+<span class="nc" id="L137">        lock.lock();</span>
         try {
-<span class="fc" id="L139">            return Collections.unmodifiableList(new ArrayList&lt;&gt;(logEvents));</span>
+<span class="nc" id="L139">            return Collections.unmodifiableList(new ArrayList&lt;&gt;(logEvents));</span>
         } finally {
-<span class="fc" id="L141">            lock.unlock();</span>
+<span class="nc" id="L141">            lock.unlock();</span>
         }
     }
 
@@ -150,8 +150,8 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
 <span class="fc" id="L150">        lock.lock();</span>
         try {
             // Precondition check
-<span class="fc bfc" id="L153" title="All 2 branches covered.">            if (layout == null) {</span>
-<span class="fc" id="L154">                throw new IllegalStateException(&quot;Layout is required for getEventStrings()&quot;);</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">            if (layout == null) {</span>
+<span class="nc" id="L154">                throw new IllegalStateException(&quot;Layout is required for getEventStrings()&quot;);</span>
             }
 <span class="fc" id="L156">            List&lt;String&gt; formattedMessages = logEvents.stream()</span>
 <span class="fc" id="L157">                    .map(layout::format)</span>
@@ -166,22 +166,22 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
      * PDF Req 1c: Prints formatted logs to console and clears the cache.
      */
     public void printLogs() {
-<span class="fc" id="L169">        lock.lock();</span>
+<span class="nc" id="L169">        lock.lock();</span>
         try {
             // Precondition check
-<span class="pc bpc" id="L172" title="1 of 2 branches missed.">            if (layout == null) {</span>
+<span class="nc bnc" id="L172" title="All 2 branches missed.">            if (layout == null) {</span>
 <span class="nc" id="L173">                throw new IllegalStateException(&quot;Layout is required for printLogs()&quot;);</span>
             }
-<span class="fc bfc" id="L175" title="All 2 branches covered.">            for (LoggingEvent event : logEvents) {</span>
+<span class="nc bnc" id="L175" title="All 2 branches missed.">            for (LoggingEvent event : logEvents) {</span>
                 // Use print, as layout (e.g., PatternLayout %n, VelocityLayout $n) handles newlines
-<span class="fc" id="L177">                System.out.print(layout.format(event));</span>
-<span class="fc" id="L178">            }</span>
-<span class="fc" id="L179">            logEvents.clear();</span>
-<span class="fc" id="L180">            discardedLogCount = 0; // Cleared logs are not counted as discarded</span>
+<span class="nc" id="L177">                System.out.print(layout.format(event));</span>
+<span class="nc" id="L178">            }</span>
+<span class="nc" id="L179">            logEvents.clear();</span>
+<span class="nc" id="L180">            discardedLogCount = 0; // Cleared logs are not counted as discarded</span>
         } finally {
-<span class="fc" id="L182">            lock.unlock();</span>
+<span class="nc" id="L182">            lock.unlock();</span>
         }
-<span class="fc" id="L184">    }</span>
+<span class="nc" id="L184">    }</span>
 
     // === JMX MBean (Bonus) Implementations ===
 
@@ -191,19 +191,19 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
      */
     @Override
     public String[] getLogMessages() {
-<span class="fc" id="L194">        lock.lock();</span>
+<span class="nc" id="L194">        lock.lock();</span>
         try {
-<span class="pc bpc" id="L196" title="1 of 2 branches missed.">            if (layout == null) {</span>
+<span class="nc bnc" id="L196" title="All 2 branches missed.">            if (layout == null) {</span>
                 // Fallback to raw messages if no layout is set
 <span class="nc" id="L198">                return logEvents.stream()</span>
 <span class="nc" id="L199">                        .map(LoggingEvent::getRenderedMessage)</span>
 <span class="nc" id="L200">                        .toArray(String[]::new);</span>
             }
-<span class="fc" id="L202">            return logEvents.stream()</span>
-<span class="fc" id="L203">                    .map(layout::format)</span>
-<span class="fc" id="L204">                    .toArray(String[]::new);</span>
+<span class="nc" id="L202">            return logEvents.stream()</span>
+<span class="nc" id="L203">                    .map(layout::format)</span>
+<span class="nc" id="L204">                    .toArray(String[]::new);</span>
         } finally {
-<span class="fc" id="L206">            lock.unlock();</span>
+<span class="nc" id="L206">            lock.unlock();</span>
         }
     }
 
@@ -222,20 +222,20 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
      */
     @Override
     public long getEstimatedCacheSize() {
-<span class="fc" id="L225">        lock.lock();</span>
+<span class="nc" id="L225">        lock.lock();</span>
         try {
-<span class="pc bpc" id="L227" title="1 of 2 branches missed.">            if (layout == null) {</span>
+<span class="nc bnc" id="L227" title="All 2 branches missed.">            if (layout == null) {</span>
                 // Estimate based on raw message length
 <span class="nc" id="L229">                return logEvents.stream()</span>
 <span class="nc" id="L230">                        .mapToLong(e -&gt; e.getRenderedMessage().length())</span>
 <span class="nc" id="L231">                        .sum();</span>
             }
             // Estimate based on formatted message byte length (as in original StressTest)
-<span class="fc" id="L234">            return logEvents.stream()</span>
-<span class="fc" id="L235">                    .mapToLong(e -&gt; layout.format(e).getBytes().length)</span>
-<span class="fc" id="L236">                    .sum();</span>
+<span class="nc" id="L234">            return logEvents.stream()</span>
+<span class="nc" id="L235">                    .mapToLong(e -&gt; layout.format(e).getBytes().length)</span>
+<span class="nc" id="L236">                    .sum();</span>
         } finally {
-<span class="fc" id="L238">            lock.unlock();</span>
+<span class="nc" id="L238">            lock.unlock();</span>
         }
     }
 
