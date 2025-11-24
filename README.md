@@ -25,7 +25,10 @@ This project implements a custom Log4j 1.2 Appender (`MemAppender`) that stores 
 ### Build and Run Unit Tests
 
 To compile the project, run all unit tests, and generate the code coverage report, execute:
-    mvn clean test jacoco:report
+
+```bash
+mvn clean test jacoco:report
+```
 
 **Output:**
 
@@ -36,7 +39,10 @@ To compile the project, run all unit tests, and generate the code coverage repor
 ### Run the Stress Test (Task 4)
 
 To execute the dedicated performance stress test, which measures time and memory usage for 10,000 logs:
-    mvn test -Dtest=StressTest
+
+```bash
+mvn test -Dtest=StressTest
+```
 
 **Note:** The test will conclude with a _"Sleeping for 30 seconds..."_ message. This is intentional to allow you to connect **VisualVM** to the process to capture a memory snapshot (Heap/CPU monitor) for the report.
 
