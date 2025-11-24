@@ -57,6 +57,19 @@ class MemAppenderJmxTest {
     }
 
     @Test
+    void testJmxGetLogMessagesNoLayout() throws Exception {
+        appender.setLayout(null); // Test fallback
+        Logger logger = Logger.getLogger("JmxTestLogger");
+        appender.append(new LoggingEvent("c", logger, Level.INFO, "Raw Test 1", null));
+        appender.append(new LoggingEvent("c", logger, Level.INFO, "Raw Test 2", null));
+
+        String[] messages = (String[]) mbs.getAttribute(mbeanName, "LogMessages");
+        assertEquals(2, messages.length);
+        assertEquals("Raw Test 1", messages[0], "Should fallback to raw message without layout");
+        assertEquals("Raw Test 2", messages[1]);
+    }
+
+    @Test
     void testJmxGetDiscardedLogCount() throws Exception {
         Logger logger = Logger.getLogger("DiscardTestLogger");
         for (int i = 0; i < 150; i++) {
@@ -87,5 +100,17 @@ class MemAppenderJmxTest {
         // This now triggers the on-demand calculation in the fixed MemAppender
         long cacheSize = (long) mbs.getAttribute(mbeanName, "EstimatedCacheSize");
         assertEquals(expected, cacheSize, "JMX estimated cache size is incorrect");
+    }
+
+    @Test
+    void testJmxGetEstimatedCacheSizeNoLayout() throws Exception {
+        appender.setLayout(null); // Test raw message estimate
+        Logger logger = Logger.getLogger("CacheSizeTestLogger");
+        appender.append(new LoggingEvent("c", logger, Level.INFO, "Short log", null)); // length 9
+        appender.append(new LoggingEvent("c", logger, Level.INFO, "A longer log message", null)); // length 20
+
+        long expected = 9L + 20L; // Char lengths, not bytes (as per code: .length())
+        long cacheSize = (long) mbs.getAttribute(mbeanName, "EstimatedCacheSize");
+        assertEquals(expected, cacheSize, "Should estimate based on raw message lengths without layout");
     }
 }

@@ -13,24 +13,35 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Stress tests for performance analysis. [6 marks: separate class, comparisons, layouts, before/after maxSize, 10k logs]
- * Uses loop for maxSizes (parameterised alternative).
- * Prints results to standard output for report generation.
+ * Stress tests for performance analysis.
+ * Implements PDF Requirement 4:
+ * - Separate test class.
+ * - Compares LinkedList vs ArrayList.
+ * - Compares ConsoleAppender vs FileAppender.
+ * - Compares VelocityLayout vs PatternLayout.
+ * - Measures Time and Memory.
  */
 @Tag("stress")
 class StressTest {
 
-    private static final int NUM_LOGS = 10000; // 10k logs sufficient
-    private static final long[] MAX_SIZES = {1, 10, 100, 1000, 10000, 100000, 1000000}; // Full range as suggested
+    private static final int NUM_LOGS = 10000; // 10k logs per PDF requirement
+    // Using the full range suggested by PDF
+    private static final long[] MAX_SIZES = {1, 10, 100, 1000, 10000, 100000, 1000000};
 
     @Test
     void runAllStressTests() throws IOException {
         // Ensure clean state
         MemAppender.resetInstance();
-        MemAppender.getInstance().reset();
+        if (MemAppender.getInstance() != null) {
+            MemAppender.getInstance().reset();
+        }
 
-        System.out.println("=== Stress Test Results (Time in ms, Memory in MB) ===");
-        System.out.printf("%-30s %-10s %-15s %-15s %-10s%n", "Configuration", "MaxSize", "Time(ms)", "Est. Memory(MB)", "Discarded");
+        System.out.println("=== Warming up JVM (to ensure fair comparison) ===");
+        runWarmup();
+
+        System.out.println("\n=== Stress Test Results (Time in ms, Memory in MB) ===");
+        // Formatted Header for alignment
+        System.out.printf("%-38s %-12s %-12s %-18s %-10s%n", "Configuration", "MaxSize", "Time(ms)", "Est. Memory(MB)", "Discarded");
 
         // Loop for MemAppender comparisons (simulates parameterised for all maxSizes)
         for (long maxSize : MAX_SIZES) {
@@ -53,6 +64,21 @@ class StressTest {
         }
     }
 
+    private void runWarmup() {
+        // Run a dummy test to trigger class loading and JIT compilation
+        MemAppender.resetInstance();
+        MemAppender appender = MemAppender.getInstance();
+        appender.setLayout(new SimpleLayout());
+        Logger logger = Logger.getLogger("WarmupLogger");
+        logger.addAppender(appender);
+        logger.setLevel(Level.INFO);
+        for (int i = 0; i < 5000; i++) {
+            logger.info("Warmup");
+        }
+        appender.reset();
+        MemAppender.resetInstance();
+    }
+
     private void testMemAppender(List<LoggingEvent> list, String name, long maxSize) {
         MemAppender.resetInstance();
         MemAppender appender = MemAppender.getInstance(list);
@@ -65,21 +91,23 @@ class StressTest {
         logger.addAppender(appender);
         logger.setLevel(Level.INFO);
 
-        // Before maxSize: log half (no/less discard)
-        runLoad(logger, name + " (Before)", String.valueOf(maxSize), NUM_LOGS / 2, true);
+        // Before maxSize: log half
+        runLoad(logger, name, String.valueOf(maxSize), NUM_LOGS / 2, true);
 
         // After maxSize: log rest (with discard)
-        runLoad(logger, name + " (After)", String.valueOf(maxSize), NUM_LOGS / 2, false);
+        runLoad(logger, name, String.valueOf(maxSize), NUM_LOGS / 2, false);
 
-        // Combined output for config
+        // Combined output for discard count
         long discarded = appender.getDiscardedLogCount();
-        System.out.printf("%-30s %-10s (Total Discarded: %d)%n", name, maxSize, discarded);
+        // Print summary row for the configuration
+        System.out.printf("%-38s %-12s %-12s %-18s (Total Discarded: %d)%n",
+                name + " [Summary]", maxSize, "-", "-", discarded);
     }
 
     private void testConsoleAppender() {
         ConsoleAppender appender = new ConsoleAppender(new SimpleLayout());
-        appender.setImmediateFlush(false); // Avoid slow IO
-        appender.setWriter(new PrintWriter(new StringWriter())); // Dummy for sensible comparison
+        appender.setImmediateFlush(false); // Avoid slow IO to see pure appender overhead
+        appender.setWriter(new PrintWriter(new StringWriter())); // Dummy writer
 
         Logger logger = Logger.getLogger("StressLogger");
         logger.removeAllAppenders();
@@ -114,46 +142,53 @@ class StressTest {
         appender.setLayout(new VelocityLayout("[$p] $c $d: $m$n"));
         logger.removeAllAppenders();
         logger.addAppender(appender);
-        long startV = System.currentTimeMillis();
+        long startV = System.nanoTime();
         for (int i = 0; i < NUM_LOGS; i++) {
             logger.info("Layout test message " + i);
         }
         appender.getEventStrings(); // Force format
-        long endV = System.currentTimeMillis();
-        System.out.println("VelocityLayout Time (10k logs): " + (endV - startV) + "ms");
+        long endV = System.nanoTime();
+        double timeMs = (endV - startV) / 1_000_000.0;
+        System.out.printf("VelocityLayout Time (10k logs): %.3f ms%n", timeMs);
 
         // PatternLayout
         appender.reset();
         appender.setLayout(new PatternLayout("[%p] %c %d: %m%n"));
         logger.removeAllAppenders();
         logger.addAppender(appender);
-        long startP = System.currentTimeMillis();
+        long startP = System.nanoTime();
         for (int i = 0; i < NUM_LOGS; i++) {
             logger.info("Layout test message " + i);
         }
         appender.getEventStrings(); // Force format
-        long endP = System.currentTimeMillis();
-        System.out.println("PatternLayout Time (10k logs): " + (endP - startP) + "ms");
+        long endP = System.nanoTime();
+        double timeMsP = (endP - startP) / 1_000_000.0;
+        System.out.printf("PatternLayout Time (10k logs): %.3f ms%n", timeMsP);
     }
 
-    // Updated runLoad: phase (before/after), isBefore flag
+    // Updated runLoad with formatted output
     private void runLoad(Logger logger, String configName, String maxSizeVal, int numLogs, boolean isBefore) {
         System.gc();
         long startMem = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-        long startTime = System.currentTimeMillis();
+
+        long startTime = System.nanoTime();
 
         for (int i = 0; i < numLogs; i++) {
             logger.info("Stress test log message number " + i + (isBefore ? " (before)" : " (after)"));
         }
 
-        long endTime = System.currentTimeMillis();
+        long endTime = System.nanoTime();
+
         System.gc();
         long endMem = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
         long usedMem = Math.max(0, endMem - startMem);
+        double timeMs = (endTime - startTime) / 1_000_000.0;
 
         // Append phase to configName
-        String phase = isBefore ? "Before" : "After";
-        System.out.printf("%-30s %-10s %-15d %-15.2f%n",
-                configName + " " + phase, maxSizeVal, (endTime - startTime), (usedMem / 1024.0 / 1024.0));
+        String phase = isBefore ? " (Before)" : " (After)";
+
+        // Aligned output
+        System.out.printf("%-38s %-12s %-12.3f %-18.2f%n",
+                configName + phase, maxSizeVal, timeMs, (usedMem / 1024.0 / 1024.0));
     }
 }

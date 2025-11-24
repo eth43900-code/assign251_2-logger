@@ -13,8 +13,7 @@ import java.util.stream.Collectors;
 
 /**
  * Custom Log4j Appender that stores LoggingEvents in memory.
- * Implements PDF requirements
- * and Bonus MBean requirements.
+ * Implements PDF requirements and Bonus MBean requirements.
  */
 public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
     private static MemAppender instance;
@@ -66,18 +65,17 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
     private void registerMBean() {
         try {
             MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-            // Store the name in the field
             this.mbeanName = new ObjectName("assign251_2:type=MemAppender");
             if (!mbs.isRegistered(mbeanName)) {
                 mbs.registerMBean(this, mbeanName);
             }
         } catch (Exception e) {
-            // In a real app, use a Log4j internal logger
+            // In a real app, consider logging this to a fallback logger
             e.printStackTrace();
         }
     }
 
-    // New method to unregister the MBean
+    // Method to unregister the MBean
     private void unregisterMBean() {
         if (this.mbeanName != null) {
             try {
@@ -88,7 +86,7 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            this.mbeanName = null;
+            this.mbeanName = null; // Ensure we don't try to unregister twice
         }
     }
 
@@ -119,7 +117,7 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
         } finally {
             lock.unlock();
         }
-        // CRITICAL FIX: Unregister MBean when closing
+        // CRITICAL: Unregister MBean when closing to avoid "InstanceAlreadyExists" errors in tests
         unregisterMBean();
     }
 
@@ -217,8 +215,6 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
 
     /**
      * MBean Req 2: Get estimated cache size in bytes (total characters).
-     * This is calculated on demand, as formatting is deferred.
-     * This is slow, but the only way to satisfy all PDF requirements.
      */
     @Override
     public long getEstimatedCacheSize() {
@@ -230,7 +226,7 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
                         .mapToLong(e -> e.getRenderedMessage().length())
                         .sum();
             }
-            // Estimate based on formatted message byte length (as in original StressTest)
+            // Estimate based on formatted message byte length
             return logEvents.stream()
                     .mapToLong(e -> layout.format(e).getBytes().length)
                     .sum();
@@ -238,8 +234,6 @@ public class MemAppender extends AppenderSkeleton implements MemAppenderMBean {
             lock.unlock();
         }
     }
-
-    // === Other Methods ===
 
     /**
      * Resets the appender to a clean state.
