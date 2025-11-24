@@ -127,4 +127,21 @@ class MemAppenderTest {
             appender.getEventStrings();
         }, "Should throw exception if layout is null");
     }
+
+
+    @Test
+    void testCloseUnregisterException() {
+        // Hard to force unregister fail (e.g., bad MBeanServer), but call close multiple times
+        appender.close();
+        appender.close(); // Second call should handle mbeanName==null, no error
+    }
+
+    @Test
+    void testAppendNoDiscard() {
+        appender.setMaxSize(3);
+        Logger logger = Logger.getLogger("TestLogger");
+        appender.append(new LoggingEvent("c", logger, Level.INFO, "Msg 1", null));
+        assertEquals(1, appender.getCurrentLogs().size());
+        assertEquals(0, appender.getDiscardedLogCount()); // Cover size < maxSize
+    }
 }

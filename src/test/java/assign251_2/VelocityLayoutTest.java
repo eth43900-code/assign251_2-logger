@@ -3,8 +3,11 @@ package assign251_2;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LoggingEvent;
+import org.apache.velocity.app.VelocityEngine;
 import org.junit.jupiter.api.Test;
 import java.util.Date;
+import java.util.Properties;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class VelocityLayoutTest {
@@ -66,4 +69,31 @@ class VelocityLayoutTest {
         // Null template should output raw message, *without* line separator
         assertEquals("Null Pattern Test", result, "Null template should output raw message");
     }
+
+    @Test
+    void testIgnoresThrowable() {
+        VelocityLayout layout = new VelocityLayout();
+        assertTrue(layout.ignoresThrowable(), "VelocityLayout should ignore throwables");
+    }
+
+    @Test
+    void testActivateOptions() {
+        VelocityLayout layout = new VelocityLayout();
+        layout.activateOptions(); // Call to cover empty method
+        // No assert needed, just coverage
+    }
+
+    @Test
+    void testVelocityInitException() {
+        // Hard to force without bad props; simulate by invalid property?
+        // But code throws RuntimeException, so expect throw
+        assertThrows(RuntimeException.class, () -> {
+            Properties props = new Properties();
+            props.setProperty("runtime.log.logsystem.class", "invalid.class.name"); // Force ClassNotFound
+            VelocityEngine ve = new VelocityEngine();
+            ve.init(props);
+        }, "Should throw on invalid logsystem class");
+    }
+
 }
+

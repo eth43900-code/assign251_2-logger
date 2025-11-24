@@ -6,13 +6,12 @@ import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Properties;
 
 public class VelocityLayout extends Layout {
     private final VelocityEngine velocityEngine;
-    private final VelocityContext context;
+    // Removed class-level VelocityContext to ensure thread safety
     private String template;
 
     public VelocityLayout() {
@@ -21,7 +20,6 @@ public class VelocityLayout extends Layout {
 
     public VelocityLayout(String pattern) {
         this.template = pattern;
-        this.context = new VelocityContext();
         this.velocityEngine = new VelocityEngine();
         try {
             // Configure Velocity to use a simple string-based logger
@@ -44,13 +42,16 @@ public class VelocityLayout extends Layout {
         }
 
         try {
-            context.put("m", message);  // Support $m variable [cite: 54]
-            context.put("p", event.getLevel().toString());  // Support $p variable [cite: 56]
-            context.put("c", event.getLoggerName());       // Support $c variable [cite: 50]
-            context.put("t", Thread.currentThread().getName()); // Support $t variable [cite: 58]
+            // CRITICAL FIX: Create context inside format() to be thread-safe.
+            // Logging events can happen concurrently.
+            VelocityContext context = new VelocityContext();
 
-            // Format date for $d variable [cite: 52]
-            // Using a simple format for $d.toString() representation
+            context.put("m", message);  // Support $m variable
+            context.put("p", event.getLevel().toString());  // Support $p variable
+            context.put("c", event.getLoggerName());       // Support $c variable
+            context.put("t", Thread.currentThread().getName()); // Support $t variable
+
+            // Format date for $d variable
             String formattedDate = new Date(event.getTimeStamp()).toString();
             context.put("d", formattedDate);
 
@@ -59,8 +60,7 @@ public class VelocityLayout extends Layout {
 
             Writer writer = new StringWriter();
             velocityEngine.evaluate(context, writer, "VelocityLayout", template);
-            // DO NOT append line separator automatically.
-            // The template (e.g., "$m$n") must control this.
+
             return writer.toString();
         } catch (Exception e) {
             // Handle invalid template: return raw message
@@ -77,7 +77,7 @@ public class VelocityLayout extends Layout {
     public void activateOptions() {}
 
     /**
-     * Set the layout pattern. [cite: 61]
+     * Set the layout pattern.
      * @param pattern The Velocity template string.
      */
     public void setPattern(String pattern) {
