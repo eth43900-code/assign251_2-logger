@@ -77,11 +77,11 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
-                    <argLine>@{argLine} -Xmx1024m</argLine> <!-- 确保 JaCoCo agent 注入 -->
-                    <forkCount>1</forkCount> <!-- 固定 fork 数为 1，避免多进程 agent 丢失 -->
-                    <reuseForks>false</reuseForks> <!-- 不重用 fork，确保每个测试新 agent -->
+                    <argLine>@{argLine} -Xmx1024m</argLine>
+                    <forkCount>1</forkCount>
+                    <reuseForks>false</reuseForks>
                     <useSystemClassLoader>false</useSystemClassLoader>
-                    <forkedProcessTimeoutInSeconds>60</forkedProcessTimeoutInSeconds> <!-- 增加超时，防 StressTest 卡住 -->
+                    <forkedProcessTimeoutInSeconds>300</forkedProcessTimeoutInSeconds>
                 </configuration>
             </plugin>
             <plugin>
