@@ -85,8 +85,6 @@ class VelocityLayoutTest {
 
     @Test
     void testVelocityInitException() {
-        // Hard to force without bad props; simulate by invalid property?
-        // But code throws RuntimeException, so expect throw
         assertThrows(RuntimeException.class, () -> {
             Properties props = new Properties();
             props.setProperty("runtime.log.logsystem.class", "invalid.class.name"); // Force ClassNotFound
