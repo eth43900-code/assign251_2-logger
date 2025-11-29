@@ -48,32 +48,12 @@ mvn test -Dtest=StressTest
 
 #### Key Notes:
 
-* The test runs for ~2-3 minutes and sleeps for 60 seconds to allow VisualVM connection.
+* The test runs for ~2-3 minutes and sleeps for 90 seconds to allow VisualVM connection.
 * **Profiling Steps (Debug/Monitoring)**:
   1. Launch VisualVM (included in JDK or downloadable from [https://visualvm.github.io/](https://visualvm.github.io/)).
-  2. During the 60-second sleep, select `org.apache.maven.surefire.booter.ForkedBooter` (pid matches the test process) in VisualVM.
+  2. During the 90-second sleep, select `org.apache.maven.surefire.booter.ForkedBooter` (pid matches the test process) in VisualVM.
   3. Navigate to the **Monitor** tab to capture heap memory/CPU usage screenshots.
   4. For deep analysis, use the **Sampler** tab to profile method execution time.
-
-### 3.3 Troubleshooting & Debug Steps
-
-#### Common Issues:
-
-1. **Test Timeout**:
-   
-   * Root Cause: Maven Surefire plugin’s default timeout is insufficient for stress tests.
-   * Fix: The `pom.xml` already configures a 6-minute timeout (`<timeout>360000</timeout>`). No additional changes needed.
-
-2. **VisualVM Cannot Connect**:
-   
-   * Ensure the test is in the 60-second sleep phase (check console for "Sleeping for 60 seconds...").
-   * Verify the JDK version of VisualVM matches the project’s JDK (OpenJDK 22.0.1).
-
-3. **Coverage Report Missing**:
-   
-   * Re-run `mvn clean test jacoco:report` to regenerate the report (ensure no test failures).
-
-4. Implementation Details & Marks Mapping
 
 -----------------------------------------
 
@@ -98,7 +78,7 @@ mvn test -Dtest=StressTest
 
 ### Task 3: Testing (4 Marks)
 
-* **JUnit Coverage & Asserts (2 marks)**: JUnit 5 tests with precise assertions (`assertSame`, `assertEquals`, `assertThrows`); JaCoCo reports 94% instruction coverage (MemAppender: 95%, VelocityLayout: 92%).
+* **JUnit Coverage & Asserts (2 marks)**: JUnit 5 tests with precise assertions (`assertSame`, `assertEquals`, `assertThrows`).
 * **Combinations (1.5 marks)**: `IntegrationTest` validates:
   * MemAppender + VelocityLayout/PatternLayout
   * VelocityLayout + ConsoleAppender

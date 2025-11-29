@@ -256,7 +256,6 @@ class StressTest {
             int finalBatch = batch;
             executor.submit(() -> {
                 for (int i = 0; i < logsPerThread; i++) {
-                    // 生成1000字符的长日志，包含批次、线程、索引信息
                     String message = generateLongLogMessage(
                             "Batch" + (finalBatch + 1) + "-Thread" + finalThreadId,
                             i
